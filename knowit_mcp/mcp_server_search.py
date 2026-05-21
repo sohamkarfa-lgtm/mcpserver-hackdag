@@ -22,9 +22,9 @@ async def search_url_for_query(url: str, query: str) -> str:
     text = soup.get_text(" ", strip=True)
     text = re.sub(r"\s+", " ", text)
 
-    return f"Content from {url}:\n\n{text}..."  
+    return f"Content from {url}:\n\n{text}"  
 
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8050)
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8051)

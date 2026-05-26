@@ -2,6 +2,7 @@
 AI Observability Module for Token Usage, Cost Tracking, and Performance Metrics
 """
 import json
+import inspect
 import time
 import logging
 from datetime import datetime
@@ -122,7 +123,7 @@ class PricingConfig:
 class MetricsStore:
     """Store and manage metrics"""
     
-    def __init__(self, storage_path: str = "ai_observability/metrics.jsonl"):
+    def __init__(self, storage_path: str = "metrics.jsonl"):
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.metrics: Dict[str, InteractionMetrics] = {}
@@ -244,7 +245,8 @@ def get_metrics_store() -> MetricsStore:
 def track_tool_call(
     model: str = "claude-3-5-sonnet",
     input_tokens: Optional[int] = None,
-    output_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None,
+    model_parameter: str = "model",
 ):
     """
     Decorator to track tool calls with observability metrics
@@ -253,10 +255,24 @@ def track_tool_call(
         model: Model name for cost calculation
         input_tokens: Override input tokens (if not provided, will be estimated)
         output_tokens: Override output tokens (if not provided, will be estimated)
+        model_parameter: Function argument name that can override the model
     """
     def decorator(func: Callable) -> Callable:
+        func_signature = inspect.signature(func)
+
+        def resolve_model(args, kwargs) -> str:
+            try:
+                bound_args = func_signature.bind_partial(*args, **kwargs)
+                runtime_model = bound_args.arguments.get(model_parameter)
+            except TypeError:
+                runtime_model = kwargs.get(model_parameter)
+
+            return str(runtime_model or model)
+
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
+            selected_model = resolve_model(args, kwargs)
+
             # Create metrics for this interaction
             metric = InteractionMetrics()
             metric.tool_name = func.__name__
@@ -264,7 +280,7 @@ def track_tool_call(
                 "args": str(args),
                 "kwargs": kwargs,
             }
-            metric.costs.model = model
+            metric.costs.model = selected_model
             
             # Track performance
             start_time = time.time()
@@ -322,12 +338,17 @@ def track_tool_call(
                 
                 # Calculate costs
                 total_cost = PricingConfig.calculate_cost(
-                    model,
+                    selected_model,
                     metric.tokens.input_tokens,
                     metric.tokens.output_tokens
                 )
-                metric.costs.input_cost = (metric.tokens.input_tokens / 1_000_000) * PricingConfig.get_pricing(model)["input"]
-                metric.costs.output_cost = (metric.tokens.output_tokens / 1_000_000) * PricingConfig.get_pricing(model)["output"]
+                pricing = PricingConfig.get_pricing(selected_model)
+                metric.costs.input_cost = (
+                    metric.tokens.input_tokens / 1_000_000
+                ) * pricing["input"]
+                metric.costs.output_cost = (
+                    metric.tokens.output_tokens / 1_000_000
+                ) * pricing["output"]
                 metric.costs.total_cost = total_cost
             
             # Store metrics

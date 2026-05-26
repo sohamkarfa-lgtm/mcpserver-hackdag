@@ -16,29 +16,29 @@ mcp = FastMCP(
 w = WorkspaceClient()
 
 @mcp.tool(description="List all catalogs in Unity Catalog")
-@track_tool_call(model="claude-3-5-sonnet", input_tokens=50, output_tokens=200)
-def list_catalogs() -> list[dict]:
+@track_tool_call(input_tokens=50, output_tokens=200)
+def list_catalogs(model: str) -> list[dict]:
     catalogs = w.catalogs.list()
     return [{"name": c.name, "comment": c.comment, "owner": c.owner} for c in catalogs]
 
 
 @mcp.tool(description="List schemas in a given catalog")
-@track_tool_call(model="claude-3-5-sonnet", input_tokens=100, output_tokens=300)
-def list_schemas(catalog_name: str) -> list[dict]:
+@track_tool_call(input_tokens=100, output_tokens=300)
+def list_schemas(catalog_name: str, model: str) -> list[dict]:
     schemas = w.schemas.list(catalog_name=catalog_name)
     return [{"name": s.name, "comment": s.comment, "owner": s.owner} for s in schemas]
 
 
 @mcp.tool(description="List tables in a given catalog and schema")
-@track_tool_call(model="claude-3-5-sonnet", input_tokens=150, output_tokens=400)
-def list_tables(catalog_name: str, schema_name: str) -> list[dict]:
+@track_tool_call(input_tokens=150, output_tokens=400)
+def list_tables(catalog_name: str, schema_name: str, model: str) -> list[dict]:
     tables = w.tables.list(catalog_name=catalog_name, schema_name=schema_name)
     return [{"name": t.name, "comment": t.comment, "owner": t.owner} for t in tables]
 
 
 @mcp.tool(description="Run a SQL statement directly against the Databricks serverless warehouse.")
-@track_tool_call(model="claude-3-5-sonnet")  # Tokens will be auto-estimated
-def run_sql(sql: str) -> dict[str, Any]:
+@track_tool_call()  # Tokens will be auto-estimated
+def run_sql(sql: str, model: str) -> dict[str, Any]:
     response = w.statement_execution.execute_statement(warehouse_id=os.getenv("DATABRICKS_WAREHOUSE_ID"), statement=sql)
     
     result = response.result

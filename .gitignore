@@ -5,3 +5,5 @@ __pycache__/
 .env
 knowit_mcp/.env
 ai_observability/metrics.jsonl
+knowit_mcp/metrics.jsonl
+metrics.jsonl

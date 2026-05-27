@@ -14,6 +14,7 @@ from observability import (
     track_tool_call,
     get_metrics_store,
     get_observability_summary,
+    get_prompt_metrics_summary,
     export_metrics,
     estimate_tokens,
     PricingConfig,
@@ -22,7 +23,11 @@ from observability import (
 
 # Example 1: Using the decorator
 @track_tool_call(model="claude-3-5-sonnet", input_tokens=100, output_tokens=200)
-def example_tool_with_explicit_tokens(query: str) -> dict:
+def example_tool_with_explicit_tokens(
+    query: str,
+    client_id: str = "demo-client",
+    prompt_id: str = "demo-prompt-1",
+) -> dict:
     """Example tool with explicit token counts"""
     print(f"Executing query: {query}")
     return {"result": "sample data", "count": 42}
@@ -82,6 +87,18 @@ def demonstrate_manual_tracking():
         print(f"    Tokens: {stats['total_tokens']}")
         print(f"    Cost: ${stats['total_cost']:.6f}")
         print(f"    Avg Latency: {stats['avg_latency_ms']:.2f}ms")
+
+    # Get breakdown by client and prompt
+    prompt_summary = get_prompt_metrics_summary()
+    print("\nBreakdown by Client and Prompt:")
+    for client_id, client_stats in prompt_summary.get("by_client", {}).items():
+        print(f"  {client_id}: {client_stats['total_prompts']} prompt(s)")
+        for prompt_id, prompt_stats in client_stats.get("prompts", {}).items():
+            print(
+                f"    {prompt_id}: {prompt_stats['total_interactions']} calls, "
+                f"{prompt_stats['total_tokens_used']} tokens, "
+                f"${prompt_stats['total_estimated_cost']:.6f}"
+            )
 
 
 def demonstrate_pricing():

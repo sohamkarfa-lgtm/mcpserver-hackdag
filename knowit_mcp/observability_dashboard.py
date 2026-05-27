@@ -6,7 +6,11 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from observability import get_metrics_store, get_observability_summary
+from observability import (
+    get_metrics_store,
+    get_observability_summary,
+    get_prompt_metrics_summary,
+)
 import os
 
 
@@ -70,6 +74,8 @@ class ObservabilityDashboard:
             print(f"\n[{idx}] Interaction ID: {interaction_id}")
             print(f"    Tool: {metric.get('tool_name', 'Unknown')}")
             print(f"    Timestamp: {metric.get('timestamp', 'Unknown')}")
+            print(f"    Client: {metric.get('client_id', 'unknown_client')}")
+            print(f"    Prompt ID: {metric.get('prompt_id', 'unknown_prompt')}")
             print(f"    Tokens: Input={metric['tokens']['input_tokens']}, "
                   f"Output={metric['tokens']['output_tokens']}, "
                   f"Total={metric['tokens']['total_tokens']}")
@@ -79,6 +85,43 @@ class ObservabilityDashboard:
             
             if not metric['performance']['success']:
                 print(f"    Error: {metric['performance']['error_message']}")
+
+    def show_prompt_metrics(self, client_id: Optional[str] = None):
+        """Display metrics grouped by client and prompt"""
+        self.print_header("PROMPT METRICS BY CLIENT")
+
+        summary = get_prompt_metrics_summary(client_id=client_id)
+
+        if summary["total_interactions"] == 0:
+            print("No metrics recorded yet.")
+            return
+
+        print(f"Total Clients:             {summary['total_clients']}")
+        print(f"Total Prompts:             {summary['total_prompts']}")
+        print(f"Total Interactions:        {summary['total_interactions']}")
+        print(f"Total Tokens Used:         {summary['total_tokens_used']:,}")
+        print(f"Total Estimated Cost:      ${summary['total_estimated_cost']:.4f}")
+
+        for current_client_id, client_stats in summary.get("by_client", {}).items():
+            self.print_section(f"Client: {current_client_id}")
+            print(
+                f"{'Prompt ID':<24} {'Calls':<8} {'Tokens':<10} "
+                f"{'Cost':<12} {'Latency':<12} {'Success':<8}"
+            )
+            print("-" * 80)
+
+            for prompt_id, prompt_stats in sorted(client_stats.get("prompts", {}).items()):
+                latency = f"{prompt_stats['average_latency_ms']:.2f}ms"
+                success_rate = f"{prompt_stats['success_rate']:.2f}%"
+                print(
+                    f"{prompt_id:<24} {prompt_stats['total_interactions']:<8} "
+                    f"{prompt_stats['total_tokens_used']:<10} "
+                    f"${prompt_stats['total_estimated_cost']:<11.4f} "
+                    f"{latency:<12} "
+                    f"{success_rate:<8}"
+                )
+                if prompt_stats.get("prompt_preview"):
+                    print(f"    {prompt_stats['prompt_preview']}")
     
     def show_cost_breakdown(self):
         """Display cost breakdown by model and tool"""
@@ -315,9 +358,14 @@ def main():
     )
     parser.add_argument(
         "--view",
-        choices=["summary", "detailed", "costs", "performance", "recommendations", "trends", "all"],
+        choices=["summary", "detailed", "prompts", "costs", "performance", "recommendations", "trends", "all"],
         default="summary",
         help="What to display"
+    )
+    parser.add_argument(
+        "--client-id",
+        type=str,
+        help="Filter prompt metrics to a single client ID"
     )
     parser.add_argument(
         "--hours",
@@ -340,11 +388,15 @@ def main():
     dashboard = ObservabilityDashboard()
     
     if args.json:
-        print(json.dumps(get_observability_summary(), indent=2))
+        if args.view == "prompts":
+            print(json.dumps(get_prompt_metrics_summary(client_id=args.client_id), indent=2))
+        else:
+            print(json.dumps(get_observability_summary(), indent=2))
     elif args.export_html:
         dashboard.export_to_html(args.export_html)
     elif args.view == "all":
         dashboard.show_summary()
+        dashboard.show_prompt_metrics(args.client_id)
         dashboard.show_detailed_metrics()
         dashboard.show_cost_breakdown()
         dashboard.show_performance_analysis()
@@ -354,6 +406,8 @@ def main():
         dashboard.show_summary()
     elif args.view == "detailed":
         dashboard.show_detailed_metrics()
+    elif args.view == "prompts":
+        dashboard.show_prompt_metrics(args.client_id)
     elif args.view == "costs":
         dashboard.show_cost_breakdown()
     elif args.view == "performance":

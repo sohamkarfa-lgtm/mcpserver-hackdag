@@ -1,10 +1,17 @@
 import os
 import json
+from typing import Optional
 from fastmcp import FastMCP
 from databricks.sdk import WorkspaceClient
 from dotenv import load_dotenv
 from langchain_protocol import Any
-from observability import track_tool_call, get_observability_summary, export_metrics, get_metrics_store
+from observability import (
+    track_tool_call,
+    get_observability_summary,
+    get_prompt_metrics_summary,
+    export_metrics,
+    get_metrics_store,
+)
 
 load_dotenv()
 
@@ -17,28 +24,52 @@ w = WorkspaceClient()
 
 @mcp.tool(description="List all catalogs in Unity Catalog")
 @track_tool_call(input_tokens=50, output_tokens=200)
-def list_catalogs(model: str) -> list[dict]:
+def list_catalogs(
+    model: str,
+    client_id: str = "unknown_client",
+    prompt_id: Optional[str] = None,
+    prompt: Optional[str] = None,
+) -> list[dict]:
     catalogs = w.catalogs.list()
     return [{"name": c.name, "comment": c.comment, "owner": c.owner} for c in catalogs]
 
 
 @mcp.tool(description="List schemas in a given catalog")
 @track_tool_call(input_tokens=100, output_tokens=300)
-def list_schemas(catalog_name: str, model: str) -> list[dict]:
+def list_schemas(
+    catalog_name: str,
+    model: str,
+    client_id: str = "unknown_client",
+    prompt_id: Optional[str] = None,
+    prompt: Optional[str] = None,
+) -> list[dict]:
     schemas = w.schemas.list(catalog_name=catalog_name)
     return [{"name": s.name, "comment": s.comment, "owner": s.owner} for s in schemas]
 
 
 @mcp.tool(description="List tables in a given catalog and schema")
 @track_tool_call(input_tokens=150, output_tokens=400)
-def list_tables(catalog_name: str, schema_name: str, model: str) -> list[dict]:
+def list_tables(
+    catalog_name: str,
+    schema_name: str,
+    model: str,
+    client_id: str = "unknown_client",
+    prompt_id: Optional[str] = None,
+    prompt: Optional[str] = None,
+) -> list[dict]:
     tables = w.tables.list(catalog_name=catalog_name, schema_name=schema_name)
     return [{"name": t.name, "comment": t.comment, "owner": t.owner} for t in tables]
 
 
 @mcp.tool(description="Run a SQL statement directly against the Databricks serverless warehouse.")
 @track_tool_call()  # Tokens will be auto-estimated
-def run_sql(sql: str, model: str) -> dict[str, Any]:
+def run_sql(
+    sql: str,
+    model: str,
+    client_id: str = "unknown_client",
+    prompt_id: Optional[str] = None,
+    prompt: Optional[str] = None,
+) -> dict[str, Any]:
     response = w.statement_execution.execute_statement(warehouse_id=os.getenv("DATABRICKS_WAREHOUSE_ID"), statement=sql)
     
     result = response.result
@@ -55,10 +86,19 @@ def run_sql(sql: str, model: str) -> dict[str, Any]:
 
 
 @mcp.tool(description="Get observability metrics summary - token usage, costs, and performance statistics")
-def get_metrics_summary() -> dict[str, Any]:
+def get_metrics_summary(include_prompt_breakdown: bool = False) -> dict[str, Any]:
     """Returns aggregated metrics including token usage, costs, and performance stats"""
-    summary = get_observability_summary()
+    summary = get_observability_summary(include_prompt_breakdown=include_prompt_breakdown)
     return summary
+
+
+@mcp.tool(description="Get metrics grouped by client and prompt")
+def get_prompt_metrics_by_client(
+    client_id: Optional[str] = None,
+    prompt_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Returns token, cost, and latency metrics grouped by client and prompt"""
+    return get_prompt_metrics_summary(client_id=client_id, prompt_id=prompt_id)
 
 
 @mcp.tool(description="Get detailed metrics for a specific interaction by ID")
@@ -72,12 +112,13 @@ def get_interaction_metrics(interaction_id: str) -> dict[str, Any]:
 
 
 @mcp.tool(description="Get all recorded metrics in a specified format (json or csv)")
-def export_metrics_data(format: str = "json") -> dict[str, Any]:
+def export_metrics_data(format: str = "json", scope: str = "summary") -> dict[str, Any]:
     """Export all metrics in JSON or CSV format"""
     try:
-        result = export_metrics(format=format)
+        result = export_metrics(format=format, scope=scope)
         return {
             "format": format,
+            "scope": scope,
             "data": result,
             "success": True
         }

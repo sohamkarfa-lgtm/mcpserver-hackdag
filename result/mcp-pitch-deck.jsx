@@ -904,7 +904,7 @@ export default function App() {
             fontWeight: 700,
           }}
         >
-          MCP · ENTERPRISE AI PITCH
+          <span style={{ fontFamily: "'Georgia', serif", fontSize: 18, fontWeight: 900, letterSpacing: -0.5, color: "#c49ab8" }}>knowit</span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {slides.map((s, i) => (
